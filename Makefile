@@ -14,7 +14,10 @@ serve:          ## History API + front end + tiles on one port
 test:           ## Unit tests, then the spec's acceptance checks against the loaded database
 	$(PY) -m pytest -q
 
+site:           ## Static build of the whole site in ./site (no server or database needed to host it)
+	$(PY) -m pipeline.export --out site
+
 report:         ## Match rates from the last refresh
 	$(PY) -m pipeline.report
 
-.PHONY: install refresh serve test report
+.PHONY: install refresh serve test site report

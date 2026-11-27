@@ -3,10 +3,79 @@
   "use strict";
   const CFG = window.ROADWORK_CONFIG;
   const $ = (id) => document.getElementById(id);
-  const api = (path) => fetch(CFG.apiBase + path).then((r) => {
+  const getJSON = (url) => fetch(url).then((r) => {
     if (!r.ok) throw new Error(r.status === 404 ? "not-found" : "HTTP " + r.status);
     return r.json();
   });
+
+  // ---------------------------------------------------------------- data
+  // Two ways to get the same data: the live history API, or pre-built files when the site is hosted
+  // statically (config.staticData). Both return identical shapes.
+
+  const fileCache = new Map();
+  function cachedJSON(url) {
+    if (!fileCache.has(url)) fileCache.set(url, getJSON(url).catch((e) => { fileCache.delete(url); throw e; }));
+    return fileCache.get(url);
+  }
+
+  const TYPE_WORDS = { BLVD: "BL", BOULEVARD: "BL", AVE: "AV", AVENUE: "AV", STREET: "ST", ROAD: "RD", DRIVE: "DR", LANE: "LN",
+    PLACE: "PL", WAY: "WY", TRAIL: "TR", TRL: "TR", CIRCLE: "CI", CIR: "CI", COURT: "CT", LOOP: "LP", HIGHWAY: "HY", HWY: "HY",
+    PARKWAY: "PW", PKWY: "PW", TERRACE: "TE", NORTH: "N", SOUTH: "S", EAST: "E", WEST: "W", SAINT: "ST" };
+
+  // CRC-32 of the UTF-8 name. Must match addr_shard() in pipeline/export.py.
+  function addrShard(name) {
+    let crc = -1;
+    for (const byte of new TextEncoder().encode(name)) {
+      crc ^= byte;
+      for (let k = 0; k < 8; k++) crc = (crc >>> 1) ^ (0xedb88320 & -(crc & 1));
+    }
+    return ((crc ^ -1) >>> 0) % CFG.addrShards;
+  }
+
+  async function staticSearch(query, limit = 8) {
+    let tokens = query.toUpperCase().replace(/[^A-Z0-9 ]/g, " ").split(/\s+/).filter(Boolean).map((t) => TYPE_WORDS[t] || t);
+    let number = null;
+    if (tokens.length > 1 && /^\d+$/.test(tokens[0]) && !/^\d+(ST|ND|RD|TH)$/.test(tokens[1])) {
+      number = Number(tokens[0]);
+      tokens = tokens.slice(1);
+    }
+    if (!tokens.length || (tokens.length === 1 && tokens[0].length < 2 && !/^\d+$/.test(tokens[0]))) return [];
+    const streets = await cachedJSON(`${CFG.staticData}/streets.json`);
+    const wanted = tokens.join(" ").length;
+    const hits = [];
+    for (const st of streets) {
+      const words = st[0].toUpperCase().split(" ");
+      if (tokens.every((t) => words.some((w) => w.startsWith(t)))) hits.push(st);
+    }
+    // closest in length to what was typed first, then the longer street
+    hits.sort((a, b) => (a[0].length - wanted) - (b[0].length - wanted) || b[1] - a[1]);
+    const results = [];
+    if (number !== null) {
+      for (const st of hits.slice(0, 12)) {
+        const shard = await cachedJSON(`${CFG.staticData}/addr/${addrShard(st[0])}.json`);
+        const range = (shard[st[0]] || []).find((r) => number >= r[0] && number <= r[1]);
+        if (range) results.push({ type: "address", label: `${number} ${st[0]}`, segment_id: range[2], center: [range[3], range[4]] });
+      }
+    }
+    for (const st of hits.slice(0, limit)) {
+      results.push({ type: "street", label: st[0], blocks: st[1], bbox: [st[2], st[3], st[4], st[5]], segment_id: st[6] });
+    }
+    return results.slice(0, limit);
+  }
+
+  const data = CFG.staticData ? {
+    meta: () => getJSON(`${CFG.staticData}/meta.json`),
+    segment: async (id) => {
+      const shard = await cachedJSON(`${CFG.staticData}/seg/${id % CFG.segShards}.json`);
+      if (!shard[id]) throw new Error("not-found");
+      return shard[id];                       // [segment, history]
+    },
+    search: staticSearch,
+  } : {
+    meta: () => getJSON(`${CFG.apiBase}/api/meta`),
+    segment: (id) => Promise.all([getJSON(`${CFG.apiBase}/api/segments/${id}`), getJSON(`${CFG.apiBase}/api/segments/${id}/events`)]),
+    search: (query) => getJSON(`${CFG.apiBase}/api/search?q=${encodeURIComponent(query)}`).then((d) => d.results),
+  };
 
   // Small DOM builder. All text goes through textContent, so source strings are never parsed as HTML.
   function el(tag, attrs, ...kids) {
@@ -171,7 +240,7 @@
 
   let current = null;
   let selected = null;   // geometry of the open segment
-  const fetchSegment = (id) => Promise.all([api(`/api/segments/${id}`), api(`/api/segments/${id}/events`)]);
+  const fetchSegment = (id) => data.segment(Number(id));
 
   function showSelected() {
     const src = map && map.getSource("selected");
@@ -344,8 +413,8 @@
       searchTimer = setTimeout(async () => {
         const seq = ++searchSeq;
         try {
-          const data = await api(`/api/search?q=${encodeURIComponent(query)}`);
-          if (seq === searchSeq) showResults(data.results, query);
+          const found = await data.search(query);
+          if (seq === searchSeq) showResults(found, query);
         } catch { /* keep the last results */ }
       }, 180);
     });
@@ -389,7 +458,7 @@
     const linked = /^#s=(\d+)$/.exec(location.hash);
     const preloaded = linked ? fetchSegment(linked[1]) : null;
     if (linked) openSegment(linked[1], { preloaded });
-    const [meta, first] = await Promise.all([api("/api/meta").catch(() => null), preloaded ? preloaded.catch(() => null) : null]);
+    const [meta, first] = await Promise.all([data.meta().catch(() => null), preloaded ? preloaded.catch(() => null) : null]);
     makeBins(meta && meta.years && meta.years.hi);
     drawLegend();
     if (meta) fillAbout(meta);

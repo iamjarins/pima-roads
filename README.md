@@ -9,7 +9,9 @@ by which contractor, under which project. Built from the engineering spec dated 
 | --- | --- |
 | `pipeline/` | The nightly job: pull, snapshot, diff, normalize, match, build tiles |
 | `db/schema.sql` | PostGIS schema (segment, work_event, project, contract, vendor, snapshots) |
-| `api/app.py` | Read-only history API; also serves the front end and tiles |
+| `api/` | Read-only history API; also serves the front end and tiles |
+| `pipeline/export.py` | Static build of the whole site, for hosting without a server |
+| `.github/workflows/publish.yml` | Nightly refresh and publish to GitHub Pages |
 | `web/` | The one-screen map (MapLibre GL JS, no build step) |
 | `tests/` | Unit tests and the spec's acceptance checks |
 
@@ -28,6 +30,19 @@ make serve       # http://localhost:8000
 Nightly refresh, for example in cron: `15 9 * * * cd /srv/roadwork && make refresh` (2:15 am Arizona).
 A failed pull exits non-zero and leaves yesterday's data in place. `make report` prints match rates and
 any record that matched no segment.
+
+## Host it as a static site
+
+`make site` (after `make refresh`) writes the whole site to `./site`: the front end, the tiles, and pre-built
+history and search files. It needs no server and no database, so any static host works. The history files
+are built by the same code as the API (`api/history.py`), so both modes show the same thing.
+
+`.github/workflows/publish.yml` does this every night in GitHub Actions with a throwaway PostGIS container
+and publishes to GitHub Pages. To turn it on: repo Settings → Pages → Source: GitHub Actions, then run the
+"Refresh and publish" workflow once from the Actions tab. GitHub Pages on a free account needs a public repo.
+
+Because the nightly database is thrown away, the static route does not keep the change log between pulls
+(`record_change`); that needs a persistent database or saved snapshots.
 
 ## Decisions the spec left open
 
