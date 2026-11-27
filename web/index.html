@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Road Work History Map · Pima County and Tucson</title>
+  <meta name="description" content="Click any road in Pima County or Tucson to see the paving work on record: what was done, when, and by which contractor.">
+  <link rel="stylesheet" href="vendor/maplibre-gl.css">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div id="map" role="application" aria-label="Map of roads in Pima County. Select a road to see its work history."></div>
+
+  <header class="topbar">
+    <form id="search" class="search" role="search" autocomplete="off">
+      <label class="visually-hidden" for="q">Search by street name or address</label>
+      <input id="q" type="search" placeholder="Search a street or address" enterkeyhint="search"
+             aria-controls="results" aria-expanded="false" role="combobox" aria-autocomplete="list">
+      <ul id="results" class="results" role="listbox" hidden></ul>
+    </form>
+    <button id="about-open" class="chip" type="button">About the data</button>
+  </header>
+
+  <section id="legend" class="legend" aria-label="Map legend">
+    <button id="legend-toggle" class="legend-title" type="button" aria-expanded="true">Most recent work on record</button>
+    <ul id="legend-items"></ul>
+  </section>
+
+  <p id="hint" class="hint">Tap a road to see its work history</p>
+
+  <aside id="panel" class="panel" aria-live="polite" hidden>
+    <div class="panel-head">
+      <div>
+        <h1 id="p-name" tabindex="-1"></h1>
+        <p id="p-stretch" class="muted"></p>
+      </div>
+      <button id="panel-close" class="icon-btn" type="button" aria-label="Close">×</button>
+    </div>
+    <div id="p-body" class="panel-body"></div>
+  </aside>
+
+  <dialog id="about">
+    <div class="about-body">
+      <button class="icon-btn about-close" type="button" aria-label="Close" onclick="this.closest('dialog').close()">×</button>
+      <h2>About the data</h2>
+      <p>This map shows paving and road surface work that Pima County and the City of Tucson have published in their
+        public map layers. Click a road to see every job on record for that block.</p>
+      <p><strong>An empty history does not mean a road was never repaired.</strong> It means neither agency has a
+        record of it in these layers. County records start in fiscal 2017. City records go back to about 2011 for
+        some major projects. State highways and the other towns are shown but their records are not loaded.</p>
+      <p>Cost is not shown yet. Neither agency publishes dollars per road, so cost appears only once a job has been
+        linked to a contract document.</p>
+      <h3>Where it comes from</h3>
+      <ul id="about-sources"></ul>
+      <h3>What the treatments mean</h3>
+      <dl id="about-treatments"></dl>
+    </div>
+  </dialog>
+
+  <script src="vendor/maplibre-gl.js"></script>
+  <script src="config.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
